@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyo
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Type Checking
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Linting
+.ruff_cache/
+
+# Logs
+logs/
+*.log
+
+# Artifacts
+artifacts/
+
+# Database
+*.db
+*.sqlite3
+
+# Alembic
+alembic.ini
+
+# Docker
+docker-compose.override.yml
+
+# Temporary Files
+*.tmp
+*.temp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node (Dashboard assets if added later)
+node_modules/
+
+# Local Secrets
+*.pem
+*.key
+*.crt
+
+# Misc
+.cache/
+
+
+!.env.example
