@@ -1,20 +1,22 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from freight.db.session import get_db
 
 router = APIRouter(
-    prefix="/api/webhooks",
+    prefix="/webhook",
     tags=["Webhooks"],
 )
 
 
-class WebhookPayload(BaseModel):
-    ref: str
-    repository: dict
-
-
 @router.post("/")
-async def receive_webhook(payload: WebhookPayload):
+async def receive_webhook(db: Session = Depends(get_db)):
+    """
+    Receive a GitHub webhook.
+
+    Database access is now available through `db`.
+    """
+
     return {
-        "message": "Webhook received",
-        "payload": payload.model_dump(),
+        "message": "Database session acquired"
     }
