@@ -7,4 +7,5 @@ class Repository(BaseModel):
 
 class GitHubWebhook(BaseModel):
     ref: str
+    after: str
     repository: Repository
