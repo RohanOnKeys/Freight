@@ -1,0 +1,19 @@
+stages:
+  - build
+  - test
+
+jobs:
+
+  build:
+    stage: build
+    image: python:3.13
+    script:
+      - echo "Building"
+
+  test:
+    stage: test
+    needs:
+      - build
+    image: python:3.13
+    script:
+      - echo "Testing"
