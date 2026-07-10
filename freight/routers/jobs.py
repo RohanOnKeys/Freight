@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
+from freight.schemas.job import JobCompleteIn
+from freight.services.scheduler import on_job_complete
 from freight.db.session import get_db
 from freight.models.job import Job
 from freight.schemas.job import JobOut
@@ -38,3 +39,47 @@ def get_job(
         )
 
     return job
+
+
+@router.post(
+    "/{job_id}/complete",
+    status_code=200,
+)
+def complete_job(
+    job_id: int,
+    payload: JobCompleteIn,
+    db: Session = Depends(get_db),
+):
+    """
+    Mark a job as completed (or failed).
+
+    Invoked by a runner after execution to update the job state and
+    release any downstream jobs whose dependencies are now satisfied.
+    """
+
+    job = (
+        db.query(Job)
+        .filter(Job.id == job_id)
+        .first()
+    )
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found",
+        )
+
+    job.exit_code = payload.exit_code
+
+    on_job_complete(
+        db=db,
+        job_id=job_id,
+        status=payload.status,
+    )
+
+    db.refresh(job)
+
+    return {
+        "message": "Job updated successfully",
+        "status": job.status,
+    }
