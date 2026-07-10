@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -9,11 +10,17 @@ class JobOut(BaseModel):
     name: str
     stage: str
     status: str
-    runner_id: int | None
-    exit_code: int | None
-    started_at: datetime | None
-    finished_at: datetime | None
+    needs: list[str]
+    runner_id: Optional[int]
+    exit_code: Optional[int]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
 
     model_config = {
-        "from_attributes": True
+        "from_attributes": True,
     }
+
+
+class JobCompleteIn(BaseModel):
+    status: str
+    exit_code: int
