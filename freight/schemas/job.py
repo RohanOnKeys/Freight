@@ -1,3 +1,10 @@
+"""
+Pydantic schemas for Freight job API operations.
+
+Defines the request and response models used when retrieving jobs,
+claiming queued work, and reporting job completion.
+"""
+
 from datetime import datetime
 from typing import Optional
 
@@ -5,6 +12,13 @@ from pydantic import BaseModel
 
 
 class JobOut(BaseModel):
+    """
+    Response schema representing a Freight job.
+
+    Includes the job's pipeline association, execution state, dependency
+    information, assigned runner, and execution timestamps.
+    """
+
     id: int
     pipeline_id: int
     name: str
@@ -22,5 +36,22 @@ class JobOut(BaseModel):
 
 
 class JobCompleteIn(BaseModel):
+    """
+    Request payload for reporting job completion.
+
+    Sent by a runner after execution finishes to report the final status
+    and process exit code.
+    """
+
     status: str
     exit_code: int
+
+
+class JobClaimIn(BaseModel):
+    """
+    Request payload for claiming a queued job.
+
+    Identifies the runner attempting to acquire ownership of the job.
+    """
+
+    runner_id: int
