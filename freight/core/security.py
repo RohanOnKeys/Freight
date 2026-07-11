@@ -1,41 +1,20 @@
 import hashlib
 import hmac
-import json
-
-from fastapi.testclient import TestClient
 
 from freight.core.config import settings
-from freight.main import app
-
-client = TestClient(app)
 
 
-def test_webhook_creates_pipeline():
-    with open(
-        "tests/fixtures/github_push_payload.json",
-        "r",
-        encoding="utf-8",
-    ) as f:
-        payload = json.load(f)
+def verify_github_signature(
+    payload: bytes,
+    signature: str | None,
+) -> bool:
+    if not signature:
+        return False
 
-    payload_bytes = json.dumps(payload).encode("utf-8")
+    expected = "sha256=" + hmac.new(
+        settings.GITHUB_WEBHOOK_SECRET.encode(),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
 
-    signature = (
-        "sha256="
-        + hmac.new(
-            settings.GITHUB_WEBHOOK_SECRET.encode(),
-            payload_bytes,
-            hashlib.sha256,
-        ).hexdigest()
-    )
-
-    response = client.post(
-        "/webhook/",
-        content=payload_bytes,
-        headers={
-            "Content-Type": "application/json",
-            "X-Hub-Signature-256": signature,
-        },
-    )
-
-    assert response.status_code == 201
+    return hmac.compare_digest(expected, signature)
