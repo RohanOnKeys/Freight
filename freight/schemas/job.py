@@ -15,8 +15,8 @@ class JobOut(BaseModel):
     """
     Response schema representing a Freight job.
 
-    Includes the job's pipeline association, execution state, dependency
-    information, assigned runner, and execution timestamps.
+    Includes the job's pipeline association, execution configuration,
+    dependency information, assigned runner, result, and timestamps.
     """
 
     id: int
@@ -25,6 +25,8 @@ class JobOut(BaseModel):
     stage: str
     status: str
     needs: list[str]
+    image: str
+    script: list[str]
     runner_id: Optional[int]
     exit_code: Optional[int]
     started_at: Optional[datetime]
