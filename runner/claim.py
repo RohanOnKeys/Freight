@@ -39,3 +39,19 @@ def wait_for_job(runner_id: int) -> int:
     )
 
     return int(job_id)
+
+
+def acknowledge_job(runner_id: int, job_id: int) -> None:
+    """
+    Remove a successfully processed job from the runner's processing list.
+
+    Args:
+        runner_id: Identifier of the runner that claimed the job.
+        job_id: Identifier of the job whose result was successfully reported.
+    """
+
+    redis_client.lrem(
+        f"freight:processing:{runner_id}",
+        1,
+        str(job_id),
+    )
