@@ -19,6 +19,7 @@ Business logic related to dependency resolution and downstream job
 scheduling is delegated to the scheduler service.
 """
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -116,6 +117,7 @@ def claim_job(
             {
                 Job.status: "running",
                 Job.runner_id: payload.runner_id,
+                Job.started_at: datetime.now(timezone.utc),
             },
             synchronize_session=False,
         )
@@ -249,6 +251,7 @@ def complete_job(
         )
 
     job.exit_code = payload.exit_code
+    job.finished_at = datetime.now(timezone.utc)
 
     on_job_complete(
         db=db,
