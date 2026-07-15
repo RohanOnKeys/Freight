@@ -1,10 +1,8 @@
-
-
 # Freight
 
 A distributed CI/CD platform built from scratch to understand how modern build automation systems work internally.
 
-Freight receives GitHub events, creates pipelines, schedules jobs, dispatches work to independent runner agents, executes jobs inside isolated Docker containers, stores artifacts, manages secrets securely, and provides a live view of every pipeline.
+Freight receives GitHub events, creates pipelines, parses pipeline definitions, schedules jobs, dispatches work to independent runner agents, executes jobs inside isolated Docker containers, stores artifacts, manages encrypted secrets, monitors runner health, and provides a live view of every pipeline.
 
 ---
 
@@ -17,9 +15,12 @@ Freight receives GitHub events, creates pipelines, schedules jobs, dispatches wo
 * Dispatches jobs through Redis
 * Executes jobs inside Docker containers
 * Streams job logs
-* Stores build artifacts
+* Preserves artifact metadata throughout the execution pipeline
+* Stores build artifacts on the server
+* Exposes artifact upload and retrieval APIs
 * Manages encrypted secrets
 * Tracks runner health
+* Automatically retries failed jobs
 * Reports pipeline status
 * Displays live pipeline progress
 
@@ -36,12 +37,12 @@ Webhook
 
 ↓
 
-Freight Server
+Pipeline Parser
 
 ↓
 
 PostgreSQL
-Pipeline State
+Pipeline + Job State
 
 ↓
 
@@ -58,6 +59,10 @@ Docker Containers
 
 ↓
 
+Artifact Upload
+
+↓
+
 Artifact Store
 
 ↓
@@ -65,9 +70,9 @@ Artifact Store
 Freight Dashboard
 ```
 
-The server coordinates the system.
+The Freight server coordinates the entire execution pipeline.
 
-Runner agents execute every job.
+Runner agents execute every job independently inside isolated Docker containers.
 
 ---
 
@@ -81,7 +86,7 @@ Runner agents execute every job.
 | Runner | Python |
 | Container Runtime | Docker |
 | Dashboard | FastAPI + Jinja2 |
-| Artifact Storage | Local Filesystem / MinIO |
+| Artifact Storage | Local Filesystem (MinIO planned) |
 
 ---
 
@@ -95,8 +100,13 @@ stages:
 jobs:
   build:
     image: python:3.12
+
     script:
       - python build.py
+
+    artifacts:
+      - dist/*
+      - reports/output.txt
 
   test:
     needs:
@@ -106,6 +116,64 @@ jobs:
 
     script:
       - pytest
+```
+
+---
+
+# Artifact Pipeline
+
+Freight preserves artifact metadata from the moment a pipeline is parsed until the runner uploads the generated files.
+
+```text
+.freight.yml
+
+↓
+
+pipeline_parser.py
+
+↓
+
+Job Model
+
+↓
+
+PostgreSQL
+
+↓
+
+GET /jobs/{id}
+
+↓
+
+Runner
+
+↓
+
+artifact_uploader.py
+
+↓
+
+POST /jobs/{id}/artifacts
+
+↓
+
+Artifact Storage
+```
+
+Artifact definitions travel naturally with each job, allowing runners to upload only the files declared inside `.freight.yml`.
+
+Artifact paths stored inside the database remain relative to the configured artifact root, improving portability across environments.
+
+Example:
+
+```
+artifacts/12/48/output.txt
+```
+
+instead of
+
+```
+C:\Users\...\artifacts\12\48\output.txt
 ```
 
 ---
@@ -132,19 +200,19 @@ tests/
 
 ## Freight Server
 
-Receives webhooks, parses pipeline configurations, builds execution graphs, schedules jobs, manages runners, tracks pipeline state, and serves the API and dashboard.
+Receives GitHub webhooks, parses pipeline configurations, builds execution graphs, schedules jobs, manages runners, tracks pipeline state, persists artifact metadata, stores uploaded artifacts, manages encrypted secrets, and serves both the REST API and dashboard.
 
 ## Freight Runner
 
-Registers with the server, polls Redis for work, claims jobs, launches Docker containers, streams logs, uploads artifacts, reports results, and sends heartbeat updates.
+Registers with the server, polls Redis for work, atomically claims jobs, launches Docker containers, streams logs, uploads artifacts declared by the pipeline, reports execution results, and continuously sends heartbeat updates.
 
 ## Queue
 
-Redis distributes jobs across available runners and ensures work is processed efficiently.
+Redis distributes jobs across available runners while ensuring safe job claiming and efficient scheduling.
 
 ## Database
 
-PostgreSQL stores pipelines, jobs, runners, artifacts, secrets, and execution history.
+PostgreSQL stores pipelines, jobs, runners, artifacts, secrets, execution history, and artifact metadata used during job execution.
 
 ## Dashboard
 
@@ -163,11 +231,15 @@ Webhook Received
 
 ↓
 
-Pipeline Created
+Pipeline Parsed
 
 ↓
 
-Configuration Parsed
+Job Graph Created
+
+↓
+
+Jobs Stored
 
 ↓
 
@@ -187,6 +259,10 @@ Logs Stream
 
 ↓
 
+Artifacts Uploaded
+
+↓
+
 Artifacts Stored
 
 ↓
@@ -202,12 +278,54 @@ Pipeline Completed
 * Docker based isolated execution
 * Job dependency scheduling
 * Parallel job execution
+* Atomic job claiming
+* Redis backed distributed job queue
+* GitHub webhook integration
+* `.freight.yml` pipeline parsing
+* Artifact metadata propagation
+* Artifact upload API
+* Artifact retrieval API
+* Relative artifact path storage
+* Local filesystem artifact storage
+* Secure secret management with encryption
 * Runner heartbeat monitoring
 * Automatic job retry
 * Fault recovery
-* Secure secret management
-* Artifact storage
 * Live pipeline dashboard
-* GitHub webhook integration
 * REST API
 * Command Line Interface
+
+---
+
+# Current Status
+
+### Completed
+
+- GitHub webhook processing
+- Pipeline parsing
+- DAG validation
+- PostgreSQL persistence
+- Redis scheduling
+- Runner registration
+- Heartbeat monitoring
+- Atomic job claiming
+- Docker execution
+- Live log streaming
+- Job completion reporting
+- Artifact upload API
+- Artifact retrieval API
+- Artifact persistence
+- Filesystem artifact storage
+- Artifact metadata propagation
+
+### In Progress
+
+- Automatic artifact uploading from runners
+
+### Planned
+
+- Dashboard
+- CLI
+- MinIO artifact backend
+- Multi runner deployment
+- Comprehensive integration tests
