@@ -1,19 +1,14 @@
-stages:
-  - build
-  - test
+version: 1
 
 jobs:
-
   build:
     stage: build
-    image: python:3.13
-    script:
-      - echo "Building"
+    image: python:3.12
 
-  test:
-    stage: test
-    needs:
-      - build
-    image: python:3.13
     script:
-      - echo "Testing"
+      - echo "Freight artifact upload test" > test.txt
+      - echo "Runner executed successfully" >> test.txt
+
+    artifacts:
+      paths:
+        - test.txt

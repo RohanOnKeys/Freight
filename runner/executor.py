@@ -13,27 +13,40 @@ import docker
 from runner.log_streamer import stream_logs
 
 
-def run_job(job_id: int, image: str, script: list[str]) -> tuple[int, str]:
+def run_job(
+    job_id: int,
+    image: str,
+    script: list[str],
+) -> tuple[int, str, Path]:
     """
     Execute a Freight job inside a Docker container.
 
-    The container runs in a dedicated per-job workspace. Standard output
-    and standard error are streamed line-by-line to the Freight server
-    while also being captured for the caller.
+    A dedicated workspace is created for every job. Standard output and
+    standard error are streamed to the Freight server while also being
+    captured locally.
 
     Args:
-        job_id: Unique identifier of the Freight job.
-        image: Docker image used to execute the job.
-        script: Commands to execute sequentially inside the container.
+        job_id:
+            Identifier of the Freight job.
+
+        image:
+            Docker image used to execute the job.
+
+        script:
+            Commands executed sequentially inside the container.
 
     Returns:
-        A tuple containing the container exit code and complete captured
-        output.
+        A tuple containing:
+
+        - Container exit code.
+        - Complete captured output.
+        - Workspace directory used during execution.
     """
 
     client = docker.from_env()
 
     workspace = Path("workspace") / str(job_id)
+
     workspace.mkdir(
         parents=True,
         exist_ok=True,
@@ -64,9 +77,14 @@ def run_job(job_id: int, image: str, script: list[str]) -> tuple[int, str]:
         )
 
         result = container.wait()
+
         exit_code = result["StatusCode"]
 
     finally:
         container.remove()
 
-    return exit_code, output
+    return (
+        exit_code,
+        output,
+        workspace,
+    )

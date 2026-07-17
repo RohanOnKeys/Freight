@@ -27,6 +27,7 @@ class JobOut(BaseModel):
     needs: list[str]
     image: str
     script: list[str]
+    artifacts_config: dict
     runner_id: Optional[int]
     exit_code: Optional[int]
     started_at: Optional[datetime]

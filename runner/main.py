@@ -2,14 +2,16 @@
 Freight runner entrypoint.
 
 Registers the runner with the Freight server, starts the background
-heartbeat loop, waits for queued jobs, and confirms job ownership with
-the Freight server before execution.
+heartbeat loop, waits for queued jobs, confirms ownership with the
+Freight server, executes jobs, uploads produced artifacts, and reports
+the final execution result.
 """
 
 from typing import Any
 
 import requests
 
+from runner.artifact_uploader import upload_artifacts
 from runner.claim import acknowledge_job, wait_for_job
 from runner.config import RUNNER_NAME, SERVER_URL
 from runner.executor import run_job
@@ -22,6 +24,16 @@ def confirm_job_claim(job_id: int, runner_id: int) -> bool:
 
     Returns True only when the server successfully assigns the job to
     this runner. A rejected claim must never proceed to execution.
+
+    Args:
+        job_id:
+            Identifier of the claimed job.
+
+        runner_id:
+            Identifier of the runner requesting ownership.
+
+    Returns:
+        True if ownership is granted, otherwise False.
     """
 
     response = requests.post(
@@ -43,16 +55,18 @@ def confirm_job_claim(job_id: int, runner_id: int) -> bool:
 
 def fetch_job(job_id: int) -> dict[str, Any]:
     """
-    Fetch the execution configuration for a claimed job.
+    Retrieve the execution configuration for a claimed job.
 
     Args:
-        job_id: Identifier of the job to retrieve.
+        job_id:
+            Identifier of the requested job.
 
     Returns:
-        The complete job payload returned by the Freight server.
+        Complete job payload returned by the Freight server.
 
     Raises:
-        requests.HTTPError: If the server cannot return the requested job.
+        requests.HTTPError:
+            If the server rejects the request.
     """
 
     response = requests.get(
@@ -67,18 +81,21 @@ def fetch_job(job_id: int) -> dict[str, Any]:
 
 def report_job_completion(job_id: int, exit_code: int) -> None:
     """
-    Report a finished job's execution result to the Freight server.
+    Report a completed job to the Freight server.
 
-    A zero exit code marks the job as completed. Any non-zero exit code
-    marks it as failed. Successful completion allows the server-side
-    scheduler to release newly unblocked downstream jobs.
+    Successful execution is determined by a zero exit code. Any non-zero
+    exit code is reported as a failed job.
 
     Args:
-        job_id: Identifier of the completed job.
-        exit_code: Exit code returned by the job container.
+        job_id:
+            Identifier of the completed job.
+
+        exit_code:
+            Container process exit code.
 
     Raises:
-        requests.HTTPError: If the Freight server rejects the result.
+        requests.HTTPError:
+            If the Freight server rejects the completion report.
     """
 
     status = "completed" if exit_code == 0 else "failed"
@@ -97,11 +114,18 @@ def report_job_completion(job_id: int, exit_code: int) -> None:
 
 def main() -> None:
     """
-    Start and maintain the Freight runner process.
+    Start the Freight runner.
 
-    After registration, the runner continuously waits for jobs using an
-    atomic Redis operation and confirms database ownership before any
-    future execution step is allowed to proceed.
+    The runner continuously performs the following lifecycle:
+
+    1. Register with the Freight server.
+    2. Start heartbeat reporting.
+    3. Wait for queued jobs.
+    4. Confirm ownership.
+    5. Execute the job.
+    6. Upload configured artifacts.
+    7. Report completion.
+    8. Acknowledge the Redis queue.
     """
 
     print(f"[runner] registering {RUNNER_NAME}...")
@@ -121,43 +145,53 @@ def main() -> None:
 
             print(f"[runner] received job={job_id}")
 
-            if confirm_job_claim(job_id, runner_id):
-                print(f"[runner] successfully claimed job={job_id}")
-
-                job = fetch_job(job_id)
-
-                print(
-                    f"[runner] executing job={job_id} "
-                    f"image={job['image']}"
-                )
-
-                exit_code, _ = run_job(
-                    job_id=job_id,
-                    image=job["image"],
-                    script=job["script"],
-                )
-
-                print(
-                    f"[runner] job={job_id} finished "
-                    f"with exit_code={exit_code}"
-                )
-
-                report_job_completion(
-                    job_id=job_id,
-                    exit_code=exit_code,
-                )
-
-                acknowledge_job(
-                    runner_id=runner_id,
-                    job_id=job_id,
-                )
-
-                print(f"[runner] reported completion for job={job_id}")
-            else:
+            if not confirm_job_claim(job_id, runner_id):
                 print(
                     f"[runner] ownership denied for job={job_id}; "
                     "job will not be executed"
                 )
+                continue
+
+            print(f"[runner] successfully claimed job={job_id}")
+
+            job = fetch_job(job_id)
+
+            print(
+                f"[runner] executing job={job_id} "
+                f"image={job['image']}"
+            )
+
+            exit_code, _, workspace = run_job(
+                job_id=job_id,
+                image=job["image"],
+                script=job["script"],
+            )
+
+            print(
+                f"[runner] job={job_id} finished "
+                f"with exit_code={exit_code}"
+            )
+
+            upload_artifacts(
+                job_id=job_id,
+                workspace=workspace,
+                artifacts_config=job.get(
+                    "artifacts_config",
+                    {},
+                ),
+            )
+
+            report_job_completion(
+                job_id=job_id,
+                exit_code=exit_code,
+            )
+
+            acknowledge_job(
+                runner_id=runner_id,
+                job_id=job_id,
+            )
+
+            print(f"[runner] reported completion for job={job_id}")
 
     except KeyboardInterrupt:
         print("\n[runner] shutting down")

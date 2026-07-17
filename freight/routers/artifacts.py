@@ -14,6 +14,7 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
+    Form,
     HTTPException,
     UploadFile,
 )
@@ -38,6 +39,7 @@ router = APIRouter(
 )
 def upload_artifact(
     job_id: int,
+    path: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -50,14 +52,16 @@ def upload_artifact(
         ARTIFACT_ROOT/
             pipeline_id/
                 job_id/
-                    filename
+                    relative/path/to/file
 
-    A corresponding database record is created so the artifact can later
-    be listed or downloaded.
+    The original relative workspace path is preserved so directory
+    structure is maintained.
 
     Args:
         job_id:
             Identifier of the job that produced the artifact.
+        path:
+            Relative artifact path inside the job workspace.
         file:
             Uploaded artifact file.
         db:
@@ -90,12 +94,12 @@ def upload_artifact(
         / str(job.id)
     )
 
-    artifact_dir.mkdir(
+    artifact_path = artifact_dir / path
+
+    artifact_path.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
-
-    artifact_path = artifact_dir / file.filename
 
     with artifact_path.open("wb") as buffer:
         shutil.copyfileobj(

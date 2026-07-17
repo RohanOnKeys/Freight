@@ -8,7 +8,7 @@ from freight.routers import (
     secrets,
     webhooks,
 )
-
+from freight.routers.artifacts import router as artifact_router
 
 def create_app() -> FastAPI:
     """
@@ -52,6 +52,9 @@ def create_app() -> FastAPI:
 
     # Secret management endpoints.
     app.include_router(secrets.router)
+
+    # Artifact upload endpoints (for runners).
+    app.include_router(artifact_router)
 
     return app
 

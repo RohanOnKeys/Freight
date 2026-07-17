@@ -67,6 +67,12 @@ class Job(Base):
         nullable=False,
     )
 
+    artifacts_config: Mapped[list] = mapped_column(
+        JSON,
+        default=list,
+        nullable=False,
+    )
+
     status: Mapped[str] = mapped_column(
         String(32),
         default="pending",
