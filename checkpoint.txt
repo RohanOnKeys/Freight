@@ -1,183 +1,188 @@
-Freight Local Pipeline Ingestion TODO
+Freight CI/CD Tool
+Checkpoint
 
-========================================
-1. Update Pipeline model
-========================================
+Week 3
+Day 2
 
-- Add:
-    source: str (nullable=False)
+Status
+------
+Pipeline ingestion has been refactored to support multiple ingestion sources while preserving the existing scheduling and execution pipeline.
 
-- Make nullable:
-    repo
-    branch
-    commit_sha
+Completed
+---------
 
-- Existing GitHub pipelines:
-    source="github"
+[✓] Pipeline model
+    - Added Pipeline.source
+    - repo is nullable
+    - branch is nullable
+    - commit_sha is nullable
+    - Existing status field unchanged
 
-- Local pipelines:
-    source="local"
+[✓] Alembic migration
+    - Added pipelines.source
+    - Temporary server default set to "github"
+    - Existing GitHub rows migrated automatically
+    - Removed server default after migration
+    - repo nullable
+    - branch nullable
+    - commit_sha nullable
 
-========================================
-2. Alembic migration
-========================================
+[✓] Pydantic schemas
+    - Added source to PipelineCreate
+    - Added source to PipelineOut
+    - repo optional
+    - branch optional
+    - commit_sha optional
 
-- Add pipelines.source column
-- Set existing rows to source="github"
-- Remove server default after migration
-- Make repo nullable
-- Make branch nullable
-- Make commit_sha nullable
+[✓] Pipeline Service
+    - Introduced freight/services/pipeline_service.py
+    - Single pipeline creation entry point
+    - Parses pipeline
+    - Creates Pipeline row
+    - Loads jobs
+    - Builds DAG
+    - Validates DAG
+    - Schedules root jobs
+    - Returns Pipeline ORM object
 
-========================================
-3. Update Pydantic schemas
-========================================
+[✓] Webhook refactor
+    - Removed duplicated Pipeline creation logic
+    - Webhook now:
+        Verify GitHub signature
+            ↓
+        Parse webhook payload
+            ↓
+        Call create_pipeline()
 
-PipelineOut
+    - Pipelines created from webhooks now use:
 
-- Add:
-    source
+        source="github"
 
-- Make optional:
-    repo
-    branch
-    commit_sha
+Current Architecture
+--------------------
 
-========================================
-4. Update webhook router
-========================================
+                GitHub Webhook
+                       │
+                       ▼
+             create_pipeline()
+                       ▲
+                       │
+                Local CLI (next)
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+   Parse YAML      Create DB      Validate DAG
+        │              │              │
+        └──────────────┼──────────────┘
+                       │
+                  Scheduler
+                       │
+                    Redis
+                       │
+                    Runner
+                       │
+                    Docker
+                       │
+                  Artifacts
+                       │
+                  Completion
 
-When creating a pipeline:
+Next Task
+---------
 
-Pipeline(
-    source="github",
-    repo=...,
-    branch=...,
-    commit_sha=...
-)
+Week 3
+Day 3
 
-========================================
-5. Create pipeline service
-========================================
+Local Pipeline Execution (CLI)
 
-freight/services/pipeline_service.py
+Objectives
 
-Responsible for:
+[ ] Run latest Alembic migration
 
-- parse_pipeline()
-- create Pipeline row
-- load_pipeline()
-- validate DAG
-- enqueue root jobs
-- return Pipeline
+    alembic upgrade head
 
-Every ingestion method must call this service.
+[ ] Create
 
-========================================
-6. Move pipeline creation logic
-========================================
+    freight/cli.py
 
-Remove duplicated pipeline creation logic from webhook.
+[ ] Implement command
 
-Webhook should become:
+    freight run .freight.yml
 
-verify signature
-↓
-extract GitHub metadata
-↓
-create_pipeline()
-
-========================================
-7. Create CLI
-========================================
-
-freight/cli.py
-
-Commands
-
-freight run <pipeline>
-
-Initially only:
-
-freight run .freight.yml
-
-========================================
-8. CLI implementation
-========================================
-
-CLI should:
-
-- open DB session
-- call create_pipeline()
-- print pipeline id
-
-========================================
-9. Local pipeline creation
-========================================
-
-CLI creates:
-
-Pipeline(
-    source="local"
-)
-
-No fake repo
-No fake branch
-No fake commit
-
-========================================
-10. Reuse existing scheduler
-========================================
-
-Do NOT create a local scheduler.
-
-Use existing:
-
-- DAG validation
-- queueing
-- dependency resolution
-
-========================================
-11. Verify runner
-========================================
-
-Runner should work unchanged.
-
-Expected flow:
+CLI Flow
 
 .freight.yml
-↓
+      ↓
+Open database session
+      ↓
+create_pipeline(
+    source="local"
+)
+      ↓
+Print pipeline id
+
+Requirements
+
+- No fake repository name
+- No fake branch
+- No fake commit SHA
+- repo = NULL
+- branch = NULL
+- commit_sha = NULL
+- Reuse existing scheduler
+- Reuse existing runner
+- Reuse existing artifact system
+
+Expected Execution Flow
+-----------------------
+
+.freight.yml
+      ↓
 CLI
-↓
+      ↓
 Pipeline Service
-↓
-DB
-↓
+      ↓
+Pipeline
+      ↓
+Jobs
+      ↓
 Scheduler
-↓
+      ↓
 Redis
-↓
+      ↓
 Runner
-↓
+      ↓
 Docker
-↓
+      ↓
 Artifacts
-↓
+      ↓
 Completion
 
-========================================
-12. Future extensions
-========================================
+Success Criteria
+----------------
 
-Possible sources:
+[ ] Local pipeline successfully inserted into database
 
-github
-gitlab
-local
-api
-schedule
-manual
+[ ] Jobs created correctly
 
-No new execution logic required.
+[ ] DAG validated
 
-Only new ingestion methods.
+[ ] Root jobs queued
+
+[ ] Runner executes pipeline without modification
+
+[ ] Artifacts generated
+
+[ ] Pipeline completes successfully
+
+Future Work
+-----------
+
+Additional ingestion adapters
+
+- GitLab
+- REST API
+- Manual trigger
+- Scheduled pipelines
+
+These should all call create_pipeline() and require no changes to the scheduler, runner, or execution engine.

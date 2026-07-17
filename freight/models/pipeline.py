@@ -1,8 +1,9 @@
 """
 Pipeline database model.
 
-Represents a single CI/CD pipeline triggered by a GitHub event.
-A pipeline owns one or more jobs that together define the workflow.
+Represents a single CI/CD pipeline execution regardless of how it was
+triggered (GitHub webhook, local CLI, API, etc.). A pipeline owns one
+or more jobs that together define the workflow.
 """
 
 from datetime import datetime
@@ -17,8 +18,10 @@ class Pipeline(Base):
     """
     ORM model representing a pipeline execution.
 
-    Each GitHub push creates one pipeline. A pipeline contains one or
-    more jobs that are executed according to their dependency graph.
+    A pipeline may originate from multiple ingestion sources such as
+    GitHub, a local CLI invocation, or future integrations. Each
+    pipeline contains one or more jobs executed according to their
+    dependency graph.
     """
 
     __tablename__ = "pipelines"
@@ -29,19 +32,24 @@ class Pipeline(Base):
         index=True,
     )
 
-    repo: Mapped[str] = mapped_column(
-        String(255),
+    source: Mapped[str] = mapped_column(
+        String(32),
         nullable=False,
     )
 
-    commit_sha: Mapped[str] = mapped_column(
+    repo: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    commit_sha: Mapped[str | None] = mapped_column(
         String(40),
-        nullable=False,
+        nullable=True,
     )
 
-    branch: Mapped[str] = mapped_column(
+    branch: Mapped[str | None] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
     )
 
     status: Mapped[str] = mapped_column(
