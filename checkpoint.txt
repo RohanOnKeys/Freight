@@ -1,0 +1,183 @@
+Freight Local Pipeline Ingestion TODO
+
+========================================
+1. Update Pipeline model
+========================================
+
+- Add:
+    source: str (nullable=False)
+
+- Make nullable:
+    repo
+    branch
+    commit_sha
+
+- Existing GitHub pipelines:
+    source="github"
+
+- Local pipelines:
+    source="local"
+
+========================================
+2. Alembic migration
+========================================
+
+- Add pipelines.source column
+- Set existing rows to source="github"
+- Remove server default after migration
+- Make repo nullable
+- Make branch nullable
+- Make commit_sha nullable
+
+========================================
+3. Update Pydantic schemas
+========================================
+
+PipelineOut
+
+- Add:
+    source
+
+- Make optional:
+    repo
+    branch
+    commit_sha
+
+========================================
+4. Update webhook router
+========================================
+
+When creating a pipeline:
+
+Pipeline(
+    source="github",
+    repo=...,
+    branch=...,
+    commit_sha=...
+)
+
+========================================
+5. Create pipeline service
+========================================
+
+freight/services/pipeline_service.py
+
+Responsible for:
+
+- parse_pipeline()
+- create Pipeline row
+- load_pipeline()
+- validate DAG
+- enqueue root jobs
+- return Pipeline
+
+Every ingestion method must call this service.
+
+========================================
+6. Move pipeline creation logic
+========================================
+
+Remove duplicated pipeline creation logic from webhook.
+
+Webhook should become:
+
+verify signature
+↓
+extract GitHub metadata
+↓
+create_pipeline()
+
+========================================
+7. Create CLI
+========================================
+
+freight/cli.py
+
+Commands
+
+freight run <pipeline>
+
+Initially only:
+
+freight run .freight.yml
+
+========================================
+8. CLI implementation
+========================================
+
+CLI should:
+
+- open DB session
+- call create_pipeline()
+- print pipeline id
+
+========================================
+9. Local pipeline creation
+========================================
+
+CLI creates:
+
+Pipeline(
+    source="local"
+)
+
+No fake repo
+No fake branch
+No fake commit
+
+========================================
+10. Reuse existing scheduler
+========================================
+
+Do NOT create a local scheduler.
+
+Use existing:
+
+- DAG validation
+- queueing
+- dependency resolution
+
+========================================
+11. Verify runner
+========================================
+
+Runner should work unchanged.
+
+Expected flow:
+
+.freight.yml
+↓
+CLI
+↓
+Pipeline Service
+↓
+DB
+↓
+Scheduler
+↓
+Redis
+↓
+Runner
+↓
+Docker
+↓
+Artifacts
+↓
+Completion
+
+========================================
+12. Future extensions
+========================================
+
+Possible sources:
+
+github
+gitlab
+local
+api
+schedule
+manual
+
+No new execution logic required.
+
+Only new ingestion methods.
