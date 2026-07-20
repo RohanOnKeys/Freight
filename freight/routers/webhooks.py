@@ -13,7 +13,7 @@ from freight.core.security import verify_github_signature
 from freight.db.session import get_db
 from freight.schemas.pipeline import PipelineOut
 from freight.schemas.webhooks import GitHubWebhook
-from freight.services.pipeline_service import create_pipeline
+from freight.services.pipeline_services import create_pipeline
 
 router = APIRouter(
     prefix="/webhook",
