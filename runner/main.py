@@ -3,8 +3,8 @@ Freight runner entrypoint.
 
 Registers the runner with the Freight server, starts the background
 heartbeat loop, waits for queued jobs, confirms ownership with the
-Freight server, executes jobs, uploads produced artifacts, and reports
-the final execution result.
+Freight server, resolves execution secrets, executes jobs, uploads
+produced artifacts, and reports the final execution result.
 """
 
 from typing import Any
@@ -16,6 +16,10 @@ from runner.claim import acknowledge_job, wait_for_job
 from runner.config import RUNNER_NAME, SERVER_URL
 from runner.executor import run_job
 from runner.registration import register_runner, start_heartbeat
+from runner.secret_injector import (
+    build_environment,
+    fetch_job_secrets,
+)
 
 
 def confirm_job_claim(job_id: int, runner_id: int) -> bool:
@@ -83,15 +87,12 @@ def report_job_completion(job_id: int, exit_code: int) -> None:
     """
     Report a completed job to the Freight server.
 
-    Successful execution is determined by a zero exit code. Any non-zero
-    exit code is reported as a failed job.
-
     Args:
         job_id:
-            Identifier of the completed job.
+            Identifier of the completed Freight job.
 
         exit_code:
-            Container process exit code.
+            Container exit code.
 
     Raises:
         requests.HTTPError:
@@ -116,16 +117,18 @@ def main() -> None:
     """
     Start the Freight runner.
 
-    The runner continuously performs the following lifecycle:
+    Runner lifecycle:
 
     1. Register with the Freight server.
     2. Start heartbeat reporting.
     3. Wait for queued jobs.
     4. Confirm ownership.
-    5. Execute the job.
-    6. Upload configured artifacts.
-    7. Report completion.
-    8. Acknowledge the Redis queue.
+    5. Fetch job configuration.
+    6. Resolve execution secrets.
+    7. Execute the Docker container.
+    8. Upload produced artifacts.
+    9. Report completion.
+    10. Acknowledge the Redis queue.
     """
 
     print(f"[runner] registering {RUNNER_NAME}...")
@@ -152,9 +155,14 @@ def main() -> None:
                 )
                 continue
 
-            print(f"[runner] successfully claimed job={job_id}")
-
             job = fetch_job(job_id)
+
+            secrets = fetch_job_secrets(job_id)
+
+            environment = build_environment(
+                job_environment=job.get("environment", {}),
+                secrets=secrets,
+            )
 
             print(
                 f"[runner] executing job={job_id} "
@@ -165,21 +173,23 @@ def main() -> None:
                 job_id=job_id,
                 image=job["image"],
                 script=job["script"],
+                environment=environment,
             )
 
-            print(
-                f"[runner] job={job_id} finished "
-                f"with exit_code={exit_code}"
-            )
-
-            upload_artifacts(
-                job_id=job_id,
-                workspace=workspace,
-                artifacts_config=job.get(
-                    "artifacts_config",
-                    {},
-                ),
-            )
+            if exit_code == 0:
+                try:
+                    upload_artifacts(
+                        job_id=job_id,
+                        workspace=workspace,
+                        artifacts_config=job.get(
+                            "artifacts_config",
+                            {},
+                        ),
+                    )
+                except requests.HTTPError as exc:
+                    print(
+                        f"[runner] artifact upload failed: {exc}"
+                    )
 
             report_job_completion(
                 job_id=job_id,
@@ -191,7 +201,9 @@ def main() -> None:
                 job_id=job_id,
             )
 
-            print(f"[runner] reported completion for job={job_id}")
+            print(
+                f"[runner] reported completion for job={job_id}"
+            )
 
     except KeyboardInterrupt:
         print("\n[runner] shutting down")
