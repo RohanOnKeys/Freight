@@ -22,13 +22,15 @@ scheduling is delegated to the scheduler service.
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from freight.db.session import get_db
 from freight.models.job import Job
 from freight.schemas.job import JobClaimIn, JobCompleteIn, JobOut
+from freight.schemas.secret import JobSecretsOut
 from freight.services.scheduler import on_job_complete
+from freight.services.secret_service import resolve_job_secrets
 
 
 router = APIRouter(
@@ -139,6 +141,58 @@ def claim_job(
         "runner_id": payload.runner_id,
         "status": "running",
     }
+
+
+@router.get(
+    "/{job_id}/secrets",
+    response_model=JobSecretsOut,
+)
+def get_job_secrets(
+    job_id: int,
+    db: Session = Depends(get_db),
+) -> JobSecretsOut:
+    """
+    Retrieve decrypted execution secrets for a job.
+
+    This endpoint is intended exclusively for authenticated Freight runners
+    immediately before container execution.
+
+    The returned secrets are injected into the execution container as
+    environment variables and must never be persisted or exposed through
+    public APIs.
+
+    Args:
+        job_id:
+            Identifier of the Freight job.
+
+        db:
+            Active database session.
+
+    Raises:
+        HTTPException:
+            If the requested job does not exist.
+
+    Returns:
+        Mapping of secret names to decrypted values required during job
+        execution.
+    """
+
+    job = db.get(Job, job_id)
+
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found.",
+        )
+
+    secrets = resolve_job_secrets(
+        db=db,
+        scope="global",
+    )
+
+    return JobSecretsOut(
+        secrets=secrets,
+    )
 
 
 @router.post(
