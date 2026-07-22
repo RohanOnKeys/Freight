@@ -13,7 +13,7 @@ All business logic is delegated to freight.services.secret_service.
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from freight.database import get_db
+from freight.db.session import get_db
 from freight.schemas.secret import (
     JobSecretsOut,
     SecretCreate,
