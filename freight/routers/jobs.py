@@ -119,7 +119,7 @@ def claim_job(
             {
                 Job.status: "running",
                 Job.runner_id: payload.runner_id,
-                Job.started_at: datetime.now(timezone.utc),
+                Job.started_at: datetime.utcnow(),
             },
             synchronize_session=False,
         )

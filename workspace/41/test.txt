@@ -1,0 +1,2 @@
+Freight artifact upload test
+Runner executed successfully

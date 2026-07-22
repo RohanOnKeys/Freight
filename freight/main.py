@@ -1,5 +1,13 @@
+"""
+Freight FastAPI application entrypoint.
+"""
+
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from freight.core.heartbeat_monitor import monitor_runners
 from freight.routers import (
     artifacts,
     jobs,
@@ -8,53 +16,52 @@ from freight.routers import (
     secrets,
     webhooks,
 )
-from freight.routers.artifacts import router as artifact_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown.
+
+    Starts the heartbeat monitor when the API launches and
+    gracefully stops it during shutdown.
+    """
+    heartbeat_task = asyncio.create_task(
+        monitor_runners()
+    )
+
+    try:
+        yield
+
+    finally:
+        heartbeat_task.cancel()
+
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+
 
 def create_app() -> FastAPI:
-    """
-    Application factory.
-
-    Creates and configures the Freight FastAPI application,
-    registers all API routers, and exposes the health endpoint.
-    """
+    """Create and configure the Freight API."""
 
     app = FastAPI(
         title="Freight CI/CD API",
         description="Distributed CI/CD server built with FastAPI.",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     @app.get("/health", tags=["Health"])
     async def health():
-        """
-        Health check endpoint.
-
-        Returns the operational status of the Freight API server.
-        """
+        """Health check endpoint."""
         return {"status": "ok"}
 
-    # Register API routers.
-
-    # GitHub webhook endpoints.
     app.include_router(webhooks.router)
-
-    # Pipeline management and status endpoints.
     app.include_router(pipelines.router)
-
-    # Job lifecycle endpoints.
     app.include_router(jobs.router)
-
-    # Runner registration and heartbeat endpoints.
     app.include_router(runners.router)
-
-    # Artifact upload and download endpoints.
     app.include_router(artifacts.router)
-
-    # Secret management endpoints.
     app.include_router(secrets.router)
-
-    # Artifact upload endpoints (for runners).
-    app.include_router(artifact_router)
 
     return app
 

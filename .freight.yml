@@ -8,6 +8,9 @@ jobs:
     script:
       - echo "Freight artifact upload test" > test.txt
       - echo "Runner executed successfully" >> test.txt
+      - echo "Starting..."
+      - sleep 1200
+      - echo "Finished"
 
     artifacts:
       paths:

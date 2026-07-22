@@ -1,4 +1,12 @@
+"""
+Heartbeat monitoring for Freight runners.
+
+Monitors registered runners for heartbeat timeouts. Timed-out runners
+are marked as dead and any running jobs assigned to them are requeued.
+"""
+
 import asyncio
+import traceback
 from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -13,30 +21,19 @@ CHECK_INTERVAL = 15
 
 
 async def monitor_runners() -> None:
-    """Continuously monitors runner heartbeats and recovers abandoned jobs.
+    """Continuously monitor runner heartbeats."""
+    print("[heartbeat] monitor started")
 
-    This background task periodically inspects all runners marked as
-    ``alive``. If a runner has not sent a heartbeat within the configured
-    timeout window, it is considered dead.
-
-    For every timed-out runner, the monitor:
-
-    1. Marks the runner as ``dead``.
-    2. Finds all jobs currently assigned to that runner.
-    3. Resets those jobs back to the ``queued`` state.
-    4. Removes the runner assignment.
-    5. Pushes the jobs back into the Redis queue for another runner.
-
-    The monitor runs indefinitely until the application shuts down.
-
-    Returns:
-        None
-    """
     while True:
         db: Session = SessionLocal()
 
         try:
             _check_runner_health(db)
+
+        except Exception as exc:
+            print(f"[heartbeat] ERROR: {exc}")
+            traceback.print_exc()
+
         finally:
             db.close()
 
@@ -44,37 +41,46 @@ async def monitor_runners() -> None:
 
 
 def _check_runner_health(db: Session) -> None:
-    """Checks all active runners for heartbeat timeouts.
+    """Check all alive runners for heartbeat timeouts."""
+    print("[heartbeat] checking runners...")
 
-    Args:
-        db: Active SQLAlchemy database session.
+    now = datetime.utcnow()
 
-    Returns:
-        None
-    """
     runners = (
         db.query(Runner)
         .filter(Runner.status == "alive")
         .all()
     )
 
-    now = datetime.utcnow()
-
     for runner in runners:
-        if now - runner.last_heartbeat > HEARTBEAT_TIMEOUT:
+        print(
+            f"[heartbeat] "
+            f"runner={runner.id} "
+            f"status={runner.status} "
+            f"last={runner.last_heartbeat}"
+        )
+
+        if runner.last_heartbeat is None:
+            continue
+
+        delta = now - runner.last_heartbeat
+
+        print(f"[heartbeat] age={delta}")
+
+        if delta > HEARTBEAT_TIMEOUT:
+            print(
+                f"[heartbeat] runner {runner.id} timed out"
+            )
             _recover_runner(db, runner)
 
 
-def _recover_runner(db: Session, runner: Runner) -> None:
-    """Recovers jobs belonging to a timed-out runner.
+def _recover_runner(
+    db: Session,
+    runner: Runner,
+) -> None:
+    """Recover jobs from a dead runner."""
+    print(f"[heartbeat] recovering runner {runner.id}")
 
-    Args:
-        db: Active SQLAlchemy database session.
-        runner: Runner that has exceeded the heartbeat timeout.
-
-    Returns:
-        None
-    """
     runner.status = "dead"
 
     jobs = (
@@ -86,11 +92,19 @@ def _recover_runner(db: Session, runner: Runner) -> None:
         .all()
     )
 
+    print(f"[heartbeat] found {len(jobs)} running job(s)")
+
     for job in jobs:
+        print(f"[heartbeat] requeueing job {job.id}")
+
         job.status = "queued"
         job.runner_id = None
+        job.started_at = None
 
     db.commit()
 
     for job in jobs:
         push_job(job.id)
+        print(f"[heartbeat] pushed job {job.id} to Redis")
+
+    print(f"[heartbeat] recovery complete for runner {runner.id}")
