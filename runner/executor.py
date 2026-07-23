@@ -1,14 +1,15 @@
 """
 Docker-based job execution for the Freight runner.
 
-Creates an isolated workspace for every Freight job, executes the
-configured pipeline script inside a Docker container, streams container
+Executes a job's configured pipeline script inside a Docker container
+using a workspace directory prepared by the caller, streams container
 logs to the Freight server during execution, and returns the execution
 result to the runner.
 
 This module is intentionally unaware of Freight-specific concepts such
-as job claiming, secrets, artifact uploading, scheduling, or database
-state. Its sole responsibility is Docker execution.
+as job claiming, secrets, artifact uploading, scheduling, source
+checkout, or database state. Its sole responsibility is Docker
+execution against a workspace directory it is handed.
 """
 
 from pathlib import Path
@@ -22,18 +23,21 @@ def run_job(
     job_id: int,
     image: str,
     script: list[str],
+    workspace: Path,
     environment: dict[str, str] | None = None,
 ) -> tuple[int, str, Path]:
     """
     Execute a Freight job inside a Docker container.
 
-    A dedicated workspace is created for every job beneath the local
-    workspace directory and mounted into the execution container as
-    ``/workspace``.
+    The supplied workspace directory is mounted into the execution
+    container as `/workspace`. Callers are responsible for preparing
+    its contents beforehand (for example, checking out the job's
+    source commit) since this module's only responsibility is running
+    the container.
 
     Standard output and standard error are streamed to the Freight
-    server while also being accumulated locally for the final execution
-    result.
+    server while also being accumulated locally for the final
+    execution result.
 
     Environment variables supplied by the caller are injected directly
     into the execution container. This typically includes decrypted
@@ -49,27 +53,25 @@ def run_job(
         script:
             Commands executed sequentially inside the container.
 
+        workspace:
+            Directory mounted into the container as `/workspace`. Must
+            already exist; the caller owns its lifecycle and contents.
+
         environment:
-            Environment variables injected into the execution container.
-            If omitted, the container executes without additional
-            environment variables.
+            Environment variables injected into the execution
+            container. If omitted, the container executes without
+            additional environment variables.
 
     Returns:
         A tuple containing:
 
         - Container exit code.
         - Complete captured stdout/stderr output.
-        - Workspace directory used during execution.
+        - The workspace directory used during execution (echoed back
+          for convenience).
     """
 
     client = docker.from_env()
-
-    workspace = Path("workspace") / str(job_id)
-
-    workspace.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
 
     command = " && ".join(script)
 

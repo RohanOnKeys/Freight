@@ -3,23 +3,26 @@ Freight runner entrypoint.
 
 Registers the runner with the Freight server, starts the background
 heartbeat loop, waits for queued jobs, confirms ownership with the
-Freight server, resolves execution secrets, executes jobs, uploads
-produced artifacts, and reports the final execution result.
+Freight server, resolves execution secrets, checks out the job's
+source commit, executes jobs, uploads produced artifacts, and reports
+the final execution result.
 """
 
+from pathlib import Path
 from typing import Any
 
 import requests
 
 from runner.artifact_uploader import upload_artifacts
 from runner.claim import acknowledge_job, wait_for_job
-from runner.config import RUNNER_NAME, SERVER_URL
+from runner.config import GITHUB_TOKEN, RUNNER_NAME, SERVER_URL
 from runner.executor import run_job
 from runner.registration import register_runner, start_heartbeat
 from runner.secret_injector import (
     build_environment,
     fetch_job_secrets,
 )
+from runner.source_checkout import checkout_source
 
 
 def confirm_job_claim(job_id: int, runner_id: int) -> bool:
@@ -66,7 +69,9 @@ def fetch_job(job_id: int) -> dict[str, Any]:
             Identifier of the requested job.
 
     Returns:
-        Complete job payload returned by the Freight server.
+        Complete job payload returned by the Freight server, including
+        the source repository, branch, and commit to check out before
+        execution when the job originated from a GitHub webhook.
 
     Raises:
         requests.HTTPError:
@@ -125,10 +130,11 @@ def main() -> None:
     4. Confirm ownership.
     5. Fetch job configuration.
     6. Resolve execution secrets.
-    7. Execute the Docker container.
-    8. Upload produced artifacts.
-    9. Report completion.
-    10. Acknowledge the Redis queue.
+    7. Check out the job's source commit, if any.
+    8. Execute the Docker container.
+    9. Upload produced artifacts.
+    10. Report completion.
+    11. Acknowledge the Redis queue.
     """
 
     print(f"[runner] registering {RUNNER_NAME}...")
@@ -164,6 +170,29 @@ def main() -> None:
                 secrets=secrets,
             )
 
+            workspace = Path("workspace") / str(job_id)
+            workspace.mkdir(parents=True, exist_ok=True)
+
+            repo = job.get("repo")
+            commit_sha = job.get("commit_sha")
+
+            if repo and commit_sha:
+                print(
+                    f"[runner] checking out {repo}@{commit_sha} "
+                    f"for job={job_id}"
+                )
+                checkout_source(
+                    workspace=workspace,
+                    repo=repo,
+                    commit_sha=commit_sha,
+                    github_token=GITHUB_TOKEN,
+                )
+            else:
+                print(
+                    f"[runner] job={job_id} has no source repo; "
+                    "running script in an empty workspace"
+                )
+
             print(
                 f"[runner] executing job={job_id} "
                 f"image={job['image']}"
@@ -173,6 +202,7 @@ def main() -> None:
                 job_id=job_id,
                 image=job["image"],
                 script=job["script"],
+                workspace=workspace,
                 environment=environment,
             )
 

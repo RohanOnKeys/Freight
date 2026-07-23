@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     GITHUB_WEBHOOK_SECRET: str
     FERNET_KEY: str
 
+    GITHUB_TOKEN: str | None = None
+    """
+    Optional GitHub personal access token or GitHub App installation
+    token. Only required if the repositories triggering webhooks are
+    private; used solely to read `.freight.yml` via GitHub's Contents
+    API. Public repositories work without it.
+    """
+
     ARTIFACT_ROOT: str
     LOG_ROOT: str
 

@@ -14,6 +14,7 @@ class Repository(BaseModel):
     """
 
     name: str
+    full_name: str
 
 
 class GitHubWebhook(BaseModel):

@@ -115,3 +115,38 @@ class Job(Base):
         back_populates="job",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def repo(self) -> str | None:
+        """
+        Repository this job's source belongs to, if any.
+
+        Proxies to the parent pipeline, since GitHub source metadata is
+        recorded once per pipeline rather than duplicated per job. Read
+        by the runner (via the `/jobs/{id}` API response) to know what
+        to `git fetch` before executing the job's script. `None` for
+        pipelines not triggered by a GitHub push (for example, local
+        CLI runs).
+        """
+        return self.pipeline.repo if self.pipeline else None
+
+    @property
+    def branch(self) -> str | None:
+        """
+        Branch this job's source was pushed on, if any.
+
+        Proxies to the parent pipeline. `None` for pipelines not
+        triggered by a GitHub push.
+        """
+        return self.pipeline.branch if self.pipeline else None
+
+    @property
+    def commit_sha(self) -> str | None:
+        """
+        Exact commit this job's source should be checked out at, if any.
+
+        Proxies to the parent pipeline. The runner fetches and checks
+        out exactly this commit before executing the job's script.
+        `None` for pipelines not triggered by a GitHub push.
+        """
+        return self.pipeline.commit_sha if self.pipeline else None
