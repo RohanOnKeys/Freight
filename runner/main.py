@@ -152,6 +152,9 @@ def main() -> None:
         while True:
             job_id = wait_for_job(runner_id)
 
+            if job_id is None:
+                continue
+
             print(f"[runner] received job={job_id}")
 
             if not confirm_job_claim(job_id, runner_id):

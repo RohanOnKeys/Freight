@@ -17,9 +17,9 @@ redis_client = redis.Redis.from_url(
 )
 
 
-def wait_for_job(runner_id: int) -> int:
+def wait_for_job(runner_id: int) -> int | None:
     """
-    Wait indefinitely for and atomically claim the next queued job.
+    Wait briefly for and atomically claim the next queued job.
 
     Redis atomically moves the job from the shared queue to the
     runner-specific processing list, ensuring that no two runners can
@@ -29,14 +29,18 @@ def wait_for_job(runner_id: int) -> int:
         runner_id: Identifier of the runner waiting for work.
 
     Returns:
-        The identifier of the atomically claimed job.
+        The identifier of the atomically claimed job, or None when no
+        job becomes available before the timeout elapses.
     """
 
     job_id = redis_client.brpoplpush(
         "freight:queue",
         f"freight:processing:{runner_id}",
-        timeout=0,
+        timeout=1,
     )
+
+    if job_id is None:
+        return None
 
     return int(job_id)
 
