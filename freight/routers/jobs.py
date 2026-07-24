@@ -307,6 +307,11 @@ def complete_job(
     job.exit_code = payload.exit_code
     job.finished_at = datetime.now(timezone.utc)
 
+    print(
+        f"[complete] status={payload.status} "
+        f"exit={payload.exit_code}"
+    )
+
     on_job_complete(
         db=db,
         job_id=job_id,

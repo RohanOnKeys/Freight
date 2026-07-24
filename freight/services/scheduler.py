@@ -1,5 +1,14 @@
+"""
+Job completion and scheduling logic for Freight pipelines.
+
+This module is the single place where a job's terminal (or retried)
+outcome is decided, and where downstream jobs are released once every
+job they depend on has completed.
+"""
+
 from sqlalchemy.orm import Session
 
+from freight.core.retry import handle_job_failure
 from freight.models.job import Job
 from freight.services.queue import push_job
 
@@ -11,6 +20,28 @@ def on_job_complete(
 ) -> None:
     """
     Mark a job complete (or failed) and queue any newly-unblocked jobs.
+
+    A failed job is not always terminal: if it still has retry attempts
+    remaining (`Job.retries < Job.max_retries`, configured through the
+    pipeline's `retries:` field), `freight.core.retry.handle_job_failure`
+    transparently requeues it with an exponential backoff delay instead
+    of finalizing it as `failed`. Downstream jobs stay blocked until the
+    retry itself either succeeds or the retry budget is exhausted.
+
+    Args:
+        db:
+            Active database session.
+
+        job_id:
+            Identifier of the job reporting its outcome.
+
+        status:
+            Final execution status reported by the runner
+            (`"completed"` or `"failed"`).
+
+    Raises:
+        ValueError:
+            If no job exists with the supplied identifier.
     """
 
     completed_job = (
@@ -21,6 +52,17 @@ def on_job_complete(
 
     if completed_job is None:
         raise ValueError(f"Job {job_id} not found")
+
+    print(
+        f"[scheduler] status={status} "
+        f"retries={completed_job.retries} "
+        f"max={completed_job.max_retries}"
+    )
+
+    # A failed job with retry attempts left gets requeued instead of
+    # finalized — stop here and leave downstream jobs blocked.
+    if status == "failed" and handle_job_failure(db, completed_job):
+        return
 
     completed_job.status = status
     db.commit()
@@ -38,6 +80,14 @@ def on_job_complete(
 def schedule_pipeline(db: Session, pipeline_id: int) -> None:
     """
     Queue every job whose dependencies are already satisfied.
+
+    Args:
+        db:
+            Active database session.
+
+        pipeline_id:
+            Identifier of the pipeline whose pending jobs should be
+            evaluated for release.
     """
 
     jobs = (
