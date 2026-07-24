@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from freight.core.heartbeat_monitor import monitor_runners
+from freight.core.retry import monitor_retries
 from freight.routers import (
     artifacts,
     jobs,
@@ -22,11 +23,16 @@ from freight.routers import (
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown.
 
-    Starts the heartbeat monitor when the API launches and
-    gracefully stops it during shutdown.
+    Starts the heartbeat monitor and the retry monitor as background
+    tasks when the API launches, and gracefully stops both during
+    shutdown.
     """
     heartbeat_task = asyncio.create_task(
         monitor_runners()
+    )
+
+    retry_task = asyncio.create_task(
+        monitor_retries()
     )
 
     try:
@@ -34,11 +40,13 @@ async def lifespan(app: FastAPI):
 
     finally:
         heartbeat_task.cancel()
+        retry_task.cancel()
 
-        try:
-            await heartbeat_task
-        except asyncio.CancelledError:
-            pass
+        for task in (heartbeat_task, retry_task):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 def create_app() -> FastAPI:
