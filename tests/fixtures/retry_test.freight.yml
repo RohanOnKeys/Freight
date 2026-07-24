@@ -1,0 +1,19 @@
+version: 1
+
+jobs:
+  always_fails:
+    stage: build
+    image: python:3.12
+    retries: 2
+    script:
+      - echo "=== starting attempt ==="
+      - date
+      - exit 1
+
+  never_runs:
+    stage: test
+    needs:
+      - always_fails
+    image: python:3.12
+    script:
+      - echo "THIS SHOULD NEVER RUN"
