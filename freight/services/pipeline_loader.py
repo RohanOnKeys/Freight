@@ -12,8 +12,8 @@ def load_pipeline(
     Load parsed pipeline jobs into the database.
 
     Each job defined in the pipeline is converted into a Job ORM object.
-    Dependency information and artifact configuration are normalized
-    before being persisted.
+    Dependency information, artifact configuration, and the retry
+    budget are normalized before being persisted.
     """
 
     jobs = pipeline.get("jobs", {})
@@ -30,6 +30,10 @@ def load_pipeline(
             {},
         )
 
+        # Retry budget for this job. Omitted or 0 means a failed
+        # execution is always terminal (no retries).
+        max_retries = config.get("retries", 0)
+
         job = Job(
             pipeline_id=pipeline_id,
             name=job_name,
@@ -39,6 +43,7 @@ def load_pipeline(
             image=config.get("image"),
             script=config.get("script", []),
             artifacts_config=artifacts_config,
+            max_retries=max_retries,
         )
 
         db.add(job)

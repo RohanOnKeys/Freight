@@ -84,6 +84,23 @@ class Job(Base):
         default=0,
         nullable=False,
     )
+    """
+    Number of retry attempts already made after an initial failure.
+    Incremented by `freight.core.retry.handle_job_failure` each time a
+    failed job is transparently requeued. Compared against
+    `max_retries` to decide whether another attempt is allowed.
+    """
+
+    max_retries: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    """
+    Maximum number of retry attempts allowed for this job, parsed from
+    the pipeline's `retries:` field (0 if the field is omitted, meaning
+    a failed execution is always terminal).
+    """
 
     exit_code: Mapped[int | None] = mapped_column(
         Integer,

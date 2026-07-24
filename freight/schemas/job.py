@@ -33,6 +33,8 @@ class JobOut(BaseModel):
     script: list[str]
     artifacts_config: dict
     runner_id: Optional[int]
+    retries: int
+    max_retries: int
     exit_code: Optional[int]
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
